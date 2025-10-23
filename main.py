@@ -5,7 +5,9 @@ import base64
 import asyncio
 import threading
 import os
-from deepgram import DeepgramClient, LiveTranscriptionEvents
+
+from deepgram import DeepgramClient
+from deepgram.transcription import LiveTranscriptionEvents
 
 app = Flask(__name__)
 sock = Sock(app)
