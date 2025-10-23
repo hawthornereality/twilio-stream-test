@@ -7,7 +7,7 @@ import threading
 import os
 
 from deepgram import DeepgramClient
-from deepgram.transcription import LiveTranscriptionEvents
+from deepgram import LiveTranscriptionEvents
 
 app = Flask(__name__)
 sock = Sock(app)
