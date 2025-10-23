@@ -2,30 +2,32 @@ from flask import Flask
 from flask_sock import Sock
 import json
 import base64
-from deepgram_sdk import DeepgramClient, LiveTranscriptionEvents
 import asyncio
 import threading
+
+# Correct import for current Deepgram SDK
+from deepgram import DeepgramClient, LiveTranscriptionEvents
 
 app = Flask(__name__)
 sock = Sock(app)
 
-# Replace with your real Deepgram API key
+# Replace this with your real Deepgram API key
 DEEPGRAM_API_KEY = "4e9337099bcbd8f3b0dd5bd5155aa4b04ed94dbb"
 
 def run_async(func):
-    """Run async functions in a background thread."""
+    """Helper: run async functions in threads"""
     def wrapper(*args, **kwargs):
         return asyncio.run(func(*args, **kwargs))
     return wrapper
 
 @run_async
 async def transcribe_live(ws):
-    """Connect to Deepgram and stream Twilio audio for transcription."""
+    """Stream Twilio audio to Deepgram in real time"""
     print("🔗 Connecting to Deepgram...")
-    dg = DeepgramClient(DEEPGRAM_API_KEY)
+    client = DeepgramClient(DEEPGRAM_API_KEY)
 
-    # Start a live transcription connection
-    dg_connection = dg.listen.live.v("1")
+    # Start a live transcription session
+    dg_connection = client.listen.live.v("1")
     options = {
         "model": "nova-2-phonecall",
         "language": "en",
@@ -73,7 +75,7 @@ def media(ws):
 
 @app.route("/")
 def home():
-    return "Twilio -> Deepgram stream running"
+    return "Twilio → Deepgram stream active"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
