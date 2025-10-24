@@ -1,6 +1,5 @@
-flask==3.1.2
-flask-sock==0.7.0
-gunicorn==23.0.0
+fastapi==0.115.4
+uvicorn==0.32.0
 twilio==9.8.4
 deepgram-sdk==5.2.0
 requests==2.32.5
