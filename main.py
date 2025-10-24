@@ -32,7 +32,7 @@ async def transcribe_live(ws):
                 transcript = data.channel.alternatives[0].transcript
                 if transcript:
                     print(f"🗣️ Transcript: {transcript}")
-                    # TODO: Add lead qualification logic here (e.g., LLM integration)
+                    # TODO: Add lead qualification logic here
             except Exception as e:
                 print(f"Transcript parse error: {e}")
 
