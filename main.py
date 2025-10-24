@@ -3,70 +3,84 @@ from flask_sock import Sock
 import json
 import base64
 import asyncio
-import threading
 import os
-
-from deepgram import DeepgramClient
-from deepgram import LiveTranscriptionEvents
+from deepgram import DeepgramClient, LiveClient, LiveTranscriptionOptions
 
 app = Flask(__name__)
 sock = Sock(app)
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
-def run_async(func):
-    def wrapper(*args, **kwargs):
-        return asyncio.run(func(*args, **kwargs))
-    return wrapper
-
-@run_async
 async def transcribe_live(ws):
     print("🔗 Connecting to Deepgram…")
-    dg = DeepgramClient(DEEPGRAM_API_KEY)
-    conn = dg.listen.live.v("1")
+    try:
+        # Initialize Deepgram client
+        dg = DeepgramClient(api_key=DEEPGRAM_API_KEY)
+        conn = LiveClient(dg)
 
-    async def on_transcript(data):
-        try:
-            payload = json.loads(data)
-            transcript = payload["channel"]["alternatives"][0]["transcript"]
-            if transcript:
-                print(f"🗣️ {transcript}")
-        except Exception as e:
-            print("parse error:", e)
+        # Define event handlers
+        async def on_transcript(data, **kwargs):
+            try:
+                transcript = data.channel.alternatives[0].transcript
+                if transcript:
+                    print(f"🗣️ Transcript: {transcript}")
+ Pianistka: W. A. Mozart
+                    # TODO: Add lead qualification logic here (e.g., LLM integration)
+            except Exception as e:
+                print(f"Transcript parse error: {e}")
 
-    conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
+        async def on_error(error, **kwargs):
+            print(f"Deepgram error: {error}")
 
-    options = {
-        "model": "nova-2-phonecall",
-        "language": "en",
-        "encoding": "mulaw",
-        "sample_rate": 8000,
-        "punctuate": True,
-    }
+        # Register event handlers
+        conn.on("transcript", on_transcript)
+        conn.on("error", on_error)
 
-    await conn.start(options)
+        # Configure Deepgram options
+        options = LiveTranscriptionOptions(
+            model="nova-2-phonecall",
+            language="en",
+            encoding="mulaw",
+            sample_rate=8000,
+            channels=1,
+            punctuate=True
+        )
 
-    while True:
-        msg = ws.receive()
-        if msg is None:
-            break
-        data = json.loads(msg)
-        event = data.get("event")
-        if event == "media":
-            audio = base64.b64decode(data["media"]["payload"])
-            await conn.send(audio)
-        elif event == "stop":
-            print("🏁 Call ended, closing Deepgram stream")
-            await conn.finish()
-            break
+        # Start Deepgram connection
+        await conn.start(options)
+        print("✅ Deepgram connected")
+
+        # Handle Twilio WebSocket messages
+        while True:
+            msg = await ws.receive()
+            if msg is None:
+                break
+            data = json.loads(msg)
+            event = data.get("event")
+            if event == "media":
+                audio = base64.b64decode(data["media"]["payload"])
+                await conn.send(audio)
+            elif event == "stop":
+                print("🏁 Call ended, closing Deepgram stream")
+                await conn.finish()
+                break
+
+    except Exception as e:
+        print(f"Deepgram connection error: {e}")
+    finally:
+        await conn.finish()
+        await ws.close()
 
 @sock.route("/media")
-def media(ws):
+async def media(ws):
     print("🔌 WebSocket connection from Twilio")
-    threading.Thread(target=transcribe_live, args=(ws,)).start()
-    while ws.receive() is not None:
-        pass
-    print("❌ Twilio connection closed")
+    try:
+        await transcribe_live(ws)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        print("❌ Twilio connection closed")
+        await ws.close()
 
 @app.route("/twiml", methods=["POST"])
 def twiml():
@@ -74,8 +88,8 @@ def twiml():
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<Response>'
-        '<Start><Stream url="wss://twilio-stream-test.onrender.com/media"/></Start>'
-        '<Say>Testing live transcription. Say something now.</Say>'
+        '<Start><Stream url="wss://twilio-stream-test.onrender.com/media" track="both"/></Start>'
+        '<Say>Hello! This is your AI bot for real estate leads. How can I help?</Say>'
         '</Response>',
         200,
         {"Content-Type": "text/xml"},
@@ -84,3 +98,6 @@ def twiml():
 @app.route("/")
 def home():
     return "Twilio ↔ Deepgram live stream active"
+
+if __name__ == "__main__":
+    app.run()
