@@ -4,7 +4,8 @@ import json
 import base64
 import asyncio
 import os
-from deepgram import DeepgramClient, LiveTranscriptionOptions
+from deepgram import AsyncDeepgramClient
+from deepgram.core.events import EventType
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -14,29 +15,9 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 async def transcribe_live(ws):
     print("🔗 Connecting to Deepgram…")
     try:
-        # Initialize Deepgram client
-        dg = DeepgramClient(api_key=DEEPGRAM_API_KEY)
-        conn = dg.listen.live.v("1")
-
-        # Define event handlers
-        async def on_transcript(data, **kwargs):
-            try:
-                transcript = data.channel.alternatives[0].transcript
-                if transcript:
-                    print(f"🗣️ Transcript: {transcript}")
-                    # TODO: Add lead qualification logic here (e.g., LLM integration)
-            except Exception as e:
-                print(f"Transcript parse error: {e}")
-
-        async def on_error(error, **kwargs):
-            print(f"Deepgram error: {error}")
-
-        # Register event handlers
-        conn.on("transcript", on_transcript)
-        conn.on("error", on_error)
-
-        # Configure Deepgram options
-        options = LiveTranscriptionOptions(
+        # Initialize async Deepgram client
+        dg = AsyncDeepgramClient(api_key=DEEPGRAM_API_KEY)
+        conn = await dg.listen.v2.connect(
             model="nova-2-phonecall",
             language="en",
             encoding="mulaw",
@@ -45,8 +26,25 @@ async def transcribe_live(ws):
             punctuate=True
         )
 
-        # Start Deepgram connection
-        await conn.start(options)
+        # Define event handlers
+        async def on_transcript(data):
+            try:
+                transcript = data.channel.alternatives[0].transcript
+                if transcript:
+                    print(f"🗣️ Transcript: {transcript}")
+                    # TODO: Add lead qualification logic here (e.g., LLM integration)
+            except Exception as e:
+                print(f"Transcript parse error: {e}")
+
+        async def on_error(error):
+            print(f"Deepgram error: {error}")
+
+        # Register event handlers
+        conn.on(EventType.MESSAGE, on_transcript)
+        conn.on(EventType.ERROR, on_error)
+
+        # Start listening
+        await conn.start_listening()
         print("✅ Deepgram connected")
 
         # Handle Twilio WebSocket messages
