@@ -1,20 +1,20 @@
-from flask import Flask
-from flask_sock import Sock
+from fastapi import FastAPI, WebSocket
 import json
 import base64
-import asyncio
 import os
 from deepgram import AsyncDeepgramClient
 from deepgram.core.events import EventType
 
-app = Flask(__name__)
-sock = Sock(app)
+app = FastAPI()
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
-async def transcribe_live(ws):
+async def transcribe_live(websocket: WebSocket):
     print("🔗 Connecting to Deepgram…")
     try:
+        await websocket.accept()
+        print("🔌 WebSocket connection from Twilio")
+        
         # Initialize async Deepgram client
         dg = AsyncDeepgramClient(api_key=DEEPGRAM_API_KEY)
         conn = await dg.listen.v2.connect(
@@ -50,8 +50,8 @@ async def transcribe_live(ws):
         # Handle Twilio WebSocket messages
         while True:
             try:
-                msg = await ws.receive()
-                if msg is None:
+                msg = await websocket.receive_text()
+                if not msg:
                     print("WebSocket closed by Twilio")
                     break
                 data = json.loads(msg)
@@ -72,36 +72,33 @@ async def transcribe_live(ws):
         print(f"Deepgram connection error: {e}")
     finally:
         await conn.finish()
-        await ws.close()
-
-@sock.route("/media")
-def media(ws):
-    print("🔌 WebSocket connection from Twilio")
-    try:
-        asyncio.run(transcribe_live(ws))
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-    finally:
+        await websocket.close()
         print("❌ Twilio connection closed")
-        ws.close()
 
-@app.route("/twiml", methods=["POST"])
-def twiml():
+@app.websocket("/media")
+async def media(websocket: WebSocket):
+    await transcribe_live(websocket)
+
+@app.post("/twiml")
+async def twiml():
     print("📞 Twilio hit /twiml")
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        '<Response>'
-        '<Start><Stream url="wss://twilio-stream-test.onrender.com/media" track="both"/></Start>'
-        '<Say>Hello! This is your AI bot for real estate leads. How can I help?</Say>'
-        '<Pause length="30"/>'
-        '</Response>',
-        200,
-        {"Content-Type": "text/xml"},
-    )
+    return {
+        "xml": (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Response>'
+            '<Start><Stream url="wss://twilio-stream-test.onrender.com/media" track="both"/></Start>'
+            '<Say>Hello! This is your AI bot for real estate leads. How can I help?</Say>'
+            '<Pause length="10"/>'
+            '<Redirect>/twiml</Redirect>'
+            '</Response>'
+        ),
+        "headers": {"Content-Type": "text/xml"}
+    }
 
-@app.route("/")
-def home():
+@app.get("/")
+async def home():
     return "Twilio ↔ Deepgram live stream active"
 
 if __name__ == "__main__":
-    app.run()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
