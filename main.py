@@ -49,17 +49,23 @@ async def transcribe_live(ws):
 
         # Handle Twilio WebSocket messages
         while True:
-            msg = await ws.receive()
-            if msg is None:
-                break
-            data = json.loads(msg)
-            event = data.get("event")
-            if event == "media":
-                audio = base64.b64decode(data["media"]["payload"])
-                await conn.send(audio)
-            elif event == "stop":
-                print("🏁 Call ended, closing Deepgram stream")
-                await conn.finish()
+            try:
+                msg = await ws.receive()
+                if msg is None:
+                    print("WebSocket closed by Twilio")
+                    break
+                data = json.loads(msg)
+                event = data.get("event")
+                print(f"Received Twilio event: {event}")
+                if event == "media":
+                    audio = base64.b64decode(data["media"]["payload"])
+                    await conn.send(audio)
+                elif event == "stop":
+                    print("🏁 Call ended, closing Deepgram stream")
+                    await conn.finish()
+                    break
+            except Exception as e:
+                print(f"WebSocket message error: {e}")
                 break
 
     except Exception as e:
@@ -87,6 +93,7 @@ def twiml():
         '<Response>'
         '<Start><Stream url="wss://twilio-stream-test.onrender.com/media" track="both"/></Start>'
         '<Say>Hello! This is your AI bot for real estate leads. How can I help?</Say>'
+        '<Pause length="30"/>'
         '</Response>',
         200,
         {"Content-Type": "text/xml"},
