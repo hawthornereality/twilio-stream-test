@@ -4,7 +4,7 @@ import json
 import base64
 import asyncio
 import os
-from deepgram import DeepgramClient, LiveClient, LiveTranscriptionOptions
+from deepgram import DeepgramClient, LiveTranscriptionOptions
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -16,7 +16,7 @@ async def transcribe_live(ws):
     try:
         # Initialize Deepgram client
         dg = DeepgramClient(api_key=DEEPGRAM_API_KEY)
-        conn = LiveClient(dg)
+        conn = dg.listen.live.v("1")
 
         # Define event handlers
         async def on_transcript(data, **kwargs):
