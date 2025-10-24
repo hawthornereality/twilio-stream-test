@@ -7,7 +7,7 @@ import threading
 import os
 
 from deepgram import DeepgramClient
-from deepgram import LiveTranscriptionEvents
+from deepgram.core.enums import EventType
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -23,42 +23,39 @@ def run_async(func):
 async def transcribe_live(ws):
     print("🔗 Connecting to Deepgram…")
     dg = DeepgramClient(DEEPGRAM_API_KEY)
-    conn = dg.listen.live.v("1")
 
-    async def on_transcript(data):
-        try:
-            payload = json.loads(data)
-            transcript = payload["channel"]["alternatives"][0]["transcript"]
-            if transcript:
-                print(f"🗣️ {transcript}")
-        except Exception as e:
-            print("parse error:", e)
+    async with dg.listen.v2.connect(
+        model="nova-2-phonecall",
+        language="en",
+        encoding="mulaw",
+        sample_rate=8000,
+        punctuate=True,
+    ) as conn:
 
-    conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
+        async def on_transcript(data):
+            try:
+                payload = json.loads(data)
+                transcript = payload["channel"]["alternatives"][0]["transcript"]
+                if transcript:
+                    print(f"🗣️ {transcript}")
+            except Exception as e:
+                print("parse error:", e)
 
-    options = {
-        "model": "nova-2-phonecall",
-        "language": "en",
-        "encoding": "mulaw",
-        "sample_rate": 8000,
-        "punctuate": True,
-    }
+        conn.on(EventType.TRANSCRIPT, on_transcript)
 
-    await conn.start(options)
-
-    while True:
-        msg = ws.receive()
-        if msg is None:
-            break
-        data = json.loads(msg)
-        event = data.get("event")
-        if event == "media":
-            audio = base64.b64decode(data["media"]["payload"])
-            await conn.send(audio)
-        elif event == "stop":
-            print("🏁 Call ended, closing Deepgram stream")
-            await conn.finish()
-            break
+        while True:
+            msg = ws.receive()
+            if msg is None:
+                break
+            data = json.loads(msg)
+            event = data.get("event")
+            if event == "media":
+                audio = base64.b64decode(data["media"]["payload"])
+                await conn.send(audio)
+            elif event == "stop":
+                print("🏁 Call ended, closing Deepgram stream")
+                await conn.finish()
+                break
 
 @sock.route("/media")
 def media(ws):
