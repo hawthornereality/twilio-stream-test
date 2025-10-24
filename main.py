@@ -6,7 +6,7 @@ import asyncio
 import threading
 import os
 
-from deepgram import DeepgramClient, LiveTranscriptionEvents
+from deepgram import DeepgramClient
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -24,7 +24,7 @@ async def transcribe_live(ws):
     dg = DeepgramClient(DEEPGRAM_API_KEY)
     conn = dg.transcription.live()
 
-    async def on_transcript(data, **kwargs):
+    async def on_message(data, **kwargs):
         try:
             payload = json.loads(data)
             transcript = payload["channel"]["alternatives"][0]["transcript"]
@@ -33,7 +33,7 @@ async def transcribe_live(ws):
         except Exception as e:
             print("parse error:", e)
 
-    conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
+    conn.on("Transcript", on_message)
 
     await conn.start({
         "model": "nova-2-phonecall",
