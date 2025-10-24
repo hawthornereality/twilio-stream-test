@@ -75,15 +75,15 @@ async def transcribe_live(ws):
         await ws.close()
 
 @sock.route("/media")
-async def media(ws):
+def media(ws):
     print("🔌 WebSocket connection from Twilio")
     try:
-        await transcribe_live(ws)
+        asyncio.run(transcribe_live(ws))
     except Exception as e:
         print(f"WebSocket error: {e}")
     finally:
         print("❌ Twilio connection closed")
-        await ws.close()
+        ws.close()
 
 @app.route("/twiml", methods=["POST"])
 def twiml():
