@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, Response
 from flask_sock import Sock
 import json
 import base64
@@ -67,6 +67,17 @@ def media(ws):
 @app.route("/")
 def home():
     return "Twilio ↔ Deepgram live stream active"
+
+@app.route("/twiml", methods=["POST"])
+def twiml():
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Start>
+    <Stream url="wss://twilio-stream-test.onrender.com/media"/>
+  </Start>
+  <Say>Testing live transcription. Say something now.</Say>
+</Response>"""
+    return Response(response, mimetype="text/xml")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
