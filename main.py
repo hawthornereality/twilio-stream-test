@@ -21,7 +21,7 @@ def run_async(func):
 @run_async
 async def transcribe_live(ws):
     print("🔗 Connecting to Deepgram…")
-    dg = DeepgramClient(DEEPGRAM_API_KEY)
+    dg = DeepgramClient(api_key=DEEPGRAM_API_KEY)
     conn = dg.transcription.live()
 
     async def on_message(data, **kwargs):
