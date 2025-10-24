@@ -4,4 +4,4 @@ gunicorn==23.0.0
 twilio==9.8.4
 deepgram-sdk==5.2.0
 requests==2.32.5
-geventwebsocket==0.10.1
+gevent-websocket==0.10.1
