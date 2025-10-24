@@ -1,4 +1,4 @@
-from flask import Flask, Response
+from flask import Flask
 from flask_sock import Sock
 import json
 import base64
@@ -7,6 +7,7 @@ import threading
 import os
 
 from deepgram import DeepgramClient
+from deepgram import LiveTranscriptionEvents
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -21,10 +22,10 @@ def run_async(func):
 @run_async
 async def transcribe_live(ws):
     print("🔗 Connecting to Deepgram…")
-    dg = DeepgramClient(api_key=DEEPGRAM_API_KEY)
-    conn = dg.transcription.live()
+    dg = DeepgramClient(DEEPGRAM_API_KEY)
+    conn = dg.listen.live.v("1")
 
-    async def on_message(data, **kwargs):
+    async def on_transcript(data):
         try:
             payload = json.loads(data)
             transcript = payload["channel"]["alternatives"][0]["transcript"]
@@ -33,25 +34,28 @@ async def transcribe_live(ws):
         except Exception as e:
             print("parse error:", e)
 
-    conn.on("Transcript", on_message)
+    conn.on(LiveTranscriptionEvents.Transcript, on_transcript)
 
-    await conn.start({
+    options = {
         "model": "nova-2-phonecall",
         "language": "en",
         "encoding": "mulaw",
         "sample_rate": 8000,
         "punctuate": True,
-    })
+    }
+
+    await conn.start(options)
 
     while True:
         msg = ws.receive()
         if msg is None:
             break
         data = json.loads(msg)
-        if data.get("event") == "media":
+        event = data.get("event")
+        if event == "media":
             audio = base64.b64decode(data["media"]["payload"])
             await conn.send(audio)
-        elif data.get("event") == "stop":
+        elif event == "stop":
             print("🏁 Call ended, closing Deepgram stream")
             await conn.finish()
             break
@@ -64,20 +68,19 @@ def media(ws):
         pass
     print("❌ Twilio connection closed")
 
+@app.route("/twiml", methods=["POST"])
+def twiml():
+    print("📞 Twilio hit /twiml")
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response>'
+        '<Start><Stream url="wss://twilio-stream-test.onrender.com/media"/></Start>'
+        '<Say>Testing live transcription. Say something now.</Say>'
+        '</Response>',
+        200,
+        {"Content-Type": "text/xml"},
+    )
+
 @app.route("/")
 def home():
     return "Twilio ↔ Deepgram live stream active"
-
-@app.route("/twiml", methods=["POST"])
-def twiml():
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Start>
-    <Stream url="wss://twilio-stream-test.onrender.com/media"/>
-  </Start>
-  <Say>Testing live transcription. Say something now.</Say>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
